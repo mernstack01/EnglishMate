@@ -1,0 +1,91 @@
+@import "tailwindcss";
+@custom-variant dark (&:is(.dark *));
+:root {
+  --background: #f7f8fa;
+  --foreground: #23302c;
+  --card: #ffffff;
+  --card-foreground: #23302c;
+  --primary: #287557;
+  --primary-foreground: #ffffff;
+  --secondary: #eaf3ee;
+  --muted: #eff2f1;
+  --muted-foreground: #707a76;
+  --border: #e5e9e6;
+  --input: #d9e0dc;
+  --ring: #287557;
+  --destructive: #bd4242;
+}
+.dark {
+  --background: #141b18;
+  --foreground: #e6ece8;
+  --card: #1b2520;
+  --card-foreground: #e6ece8;
+  --primary: #80c7a4;
+  --primary-foreground: #112d21;
+  --secondary: #233a2e;
+  --muted: #26322c;
+  --muted-foreground: #a2b1a7;
+  --border: #303e35;
+  --input: #3b4e42;
+  --ring: #80c7a4;
+  --destructive: #e37575;
+}
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-destructive: var(--destructive);
+  --font-sans: "Inter", "Avenir Next", "Segoe UI", sans-serif;
+}
+* {
+  border-color: var(--border);
+}
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+}
+button,
+a,
+select {
+  -webkit-tap-highlight-color: transparent;
+}
+button:not(:disabled),
+select {
+  cursor: pointer;
+}
+::selection {
+  background: #b5ddc5;
+  color: #163c29;
+}
+@keyframes enter {
+  from {
+    opacity: 0;
+    transform: translateY(7px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.page-enter {
+  animation: enter 0.35s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}

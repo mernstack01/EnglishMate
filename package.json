@@ -1,0 +1,59 @@
+{
+  "name": "englishmate",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@12.6.0",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "next dev --webpack",
+    "build": "next build --webpack",
+    "start": "next start",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "seed:admin": "node --import tsx scripts/seed-admin.ts",
+    "seed:vocabulary": "node --import tsx scripts/seed-vocabulary.ts",
+    "seed:synonyms": "node --import tsx scripts/seed-synonyms.ts",
+    "seed:grammar": "node --import tsx scripts/seed-grammar.ts",
+    "db:indexes": "node --import tsx scripts/ensure-indexes.ts",
+    "test": "node --import tsx --test tests/*.test.ts",
+    "test:e2e": "node --import tsx scripts/test-e2e.ts",
+    "smoke:gemini": "node --import tsx scripts/smoke-test-gemini.ts",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "dependencies": {
+    "@google/genai": "^2.24.0",
+    "@radix-ui/react-slot": "^1.3.3",
+    "bcryptjs": "^3.0.3",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^1.48.0",
+    "mongoose": "^9.10.2",
+    "next": "16.3.6",
+    "next-auth": "5.0.0-beta.32",
+    "next-themes": "^0.4.6",
+    "openai": "^7.23.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "server-only": "^0.0.1",
+    "tailwind-merge": "^3.7.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@next/env": "^16.3.6",
+    "@playwright/test": "^1.63.0",
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/node": "^24.13.6",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "eslint": "^9.39.4",
+    "eslint-config-next": "16.3.6",
+    "mongodb-memory-server": "^11.3.0",
+    "prettier": "^3.9.9",
+    "tailwindcss": "^4.3.3",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3"
+  }
+}
