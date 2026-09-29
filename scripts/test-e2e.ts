@@ -1,6 +1,7 @@
 import { checkVocabulary } from "./vocabulary-e2e";
 import { checkLearning } from "./learning-e2e";
 import { checkAiImageImport } from "./ai-import-e2e";
+import { checkScanner } from "./scanner-e2e";
 import { checkSynonyms } from "./synonyms-e2e";
 import { checkGrammar } from "./grammar-e2e";
 import { checkDailyMixedLearning } from "./daily-learning-e2e";
@@ -198,6 +199,12 @@ async function main() {
       password,
     });
     await checkAiImageImport({
+      browser,
+      page,
+      userId: alice!._id.toString(),
+      password,
+    });
+    await checkScanner({
       browser,
       page,
       userId: alice!._id.toString(),

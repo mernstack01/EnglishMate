@@ -4,3 +4,4 @@ allowBuilds:
   mongodb-memory-server: false
   "@google/genai": true
   protobufjs: true
+  tesseract.js: true

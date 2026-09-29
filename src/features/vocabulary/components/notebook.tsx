@@ -6,6 +6,7 @@ import {
   Search,
   ChevronLeft,
   ChevronRight,
+  Camera,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -56,12 +57,20 @@ export function NotebookHeading({
           </p>
         )}
       </div>
-      <Button asChild>
-        <Link href="/vocabulary/new">
-          <Plus />
-          Add word
-        </Link>
-      </Button>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button variant="outline" asChild>
+          <Link href="/vocabulary/scanner">
+            <Camera className="size-4" />
+            Scan Page
+          </Link>
+        </Button>
+        <Button asChild>
+          <Link href="/vocabulary/new">
+            <Plus />
+            Add word
+          </Link>
+        </Button>
+      </div>
     </div>
   );
 }

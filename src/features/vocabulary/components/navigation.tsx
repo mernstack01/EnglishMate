@@ -1,7 +1,14 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BookOpen, CalendarDays, Sun, Plus, Upload } from "lucide-react";
+import {
+  BookOpen,
+  CalendarDays,
+  Sun,
+  Plus,
+  Upload,
+  Camera,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 export function VocabularyNavigation() {
   const path = usePathname();
@@ -14,6 +21,7 @@ export function VocabularyNavigation() {
         { href: "/vocabulary", label: "All words", icon: BookOpen },
         { href: "/vocabulary/today", label: "Today", icon: Sun },
         { href: "/vocabulary/calendar", label: "Calendar", icon: CalendarDays },
+        { href: "/vocabulary/scanner", label: "Scan Page", icon: Camera },
         { href: "/vocabulary/new", label: "Add word", icon: Plus },
         { href: "/vocabulary/import", label: "Import", icon: Upload },
       ].map(({ href, label, icon: Icon }) => {
