@@ -52,7 +52,7 @@ test("settings cannot mutate role, status or identity", () => {
       email: "changed@example.com",
       isActive: true,
     }),
-    { name: "Alice", preferredLanguage: "UZ" },
+    { name: "Alice", preferredLanguage: "UZ", dailyQuestionGoal: 20 },
   );
 });
 test("passwords are salted and only correct secrets verify", async () => {

@@ -6,6 +6,8 @@ export interface CefrEvaluation {
   level: CefrLevel;
   title: string;
   ieltsBand: string;
+  estimatedLevelLabel?: string;
+  disclaimer?: string;
   description: string;
   criteriaProgress: {
     vocabularyCount: number;
@@ -17,6 +19,8 @@ export interface CefrEvaluation {
   };
 }
 
+export type PeriodFilter = "7d" | "30d" | "all";
+
 export interface MasteryOverviewDTO {
   overallScore: number; // 0-100
   cefr: CefrEvaluation;
@@ -26,11 +30,53 @@ export interface MasteryOverviewDTO {
   totalSessionsCompleted: number;
   totalQuestionsAnswered: number;
   overallAccuracy: number;
+  vocabularyAccuracy: number;
+  synonymAccuracy: number;
+  grammarAccuracy: number;
+  totalStudyMinutes: number;
   moduleSessionCounts: {
     vocabulary: number;
     synonyms: number;
     grammar: number;
+    mixed?: number;
   };
+}
+
+export interface WeakAreaItemDTO {
+  id: string;
+  module: "VOCABULARY" | "SYNONYMS" | "GRAMMAR";
+  title: string;
+  subtitle?: string;
+  metric: string;
+  mistakesCount?: number;
+  accuracy?: number;
+  linkHref: string;
+}
+
+export interface WeeklyComparisonDTO {
+  thisWeek: {
+    studyDays: number;
+    questionsAnswered: number;
+    accuracy: number;
+    studyMinutes: number;
+  };
+  lastWeek: {
+    studyDays: number;
+    questionsAnswered: number;
+    accuracy: number;
+    studyMinutes: number;
+  };
+  diffDays: number;
+  diffQuestions: number;
+  diffAccuracy: number;
+}
+
+export interface ActivityDayDTO {
+  date: string;
+  displayDate: string;
+  questionsAnswered: number;
+  accuracy: number;
+  studyMinutes: number;
 }
 
 export interface VocabularyAnalyticsDTO {
@@ -130,10 +176,14 @@ export interface SmartRecommendationDTO {
 }
 
 export interface ProgressAnalyticsDTO {
+  period: PeriodFilter;
   mastery: MasteryOverviewDTO;
   vocabulary: VocabularyAnalyticsDTO;
   synonyms: SynonymAnalyticsDTO;
   grammar: GrammarAnalyticsDTO;
   activity30Days: DailyActivityItemDTO[];
+  recentActivity: ActivityDayDTO[];
+  weeklyComparison: WeeklyComparisonDTO;
+  weakAreas: WeakAreaItemDTO[];
   recommendations: SmartRecommendationDTO[];
 }

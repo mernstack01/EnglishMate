@@ -23,8 +23,12 @@ import {
 } from "@/features/grammar/constants";
 import type {
   ProgressAnalyticsDTO,
+  PeriodFilter,
   CefrEvaluation,
   DailyActivityItemDTO,
+  ActivityDayDTO,
+  WeeklyComparisonDTO,
+  WeakAreaItemDTO,
   GrammarCategoryAnalytics,
   GrammarExerciseTypeAnalytics,
   GrammarTopicChallengeDTO,
@@ -44,6 +48,9 @@ export function evaluateCefrLevel(
       level: "C1",
       title: "Advanced Learner",
       ieltsBand: "7.0 – 8.0+",
+      estimatedLevelLabel: "Estimated Learning Level",
+      disclaimer:
+        "Language foundation estimate based on vocabulary, grammar, and synonyms. (Official IELTS score requires verified testing in Listening, Reading, Writing, and Speaking).",
       description:
         "Fluent and versatile communication with nuanced synonyms and high grammatical precision.",
       criteriaProgress: {
@@ -62,6 +69,9 @@ export function evaluateCefrLevel(
       level: "B2",
       title: "Upper Intermediate",
       ieltsBand: "6.0 – 6.5",
+      estimatedLevelLabel: "Estimated Learning Level",
+      disclaimer:
+        "Language foundation estimate based on vocabulary, grammar, and synonyms. (Official IELTS score requires verified testing in Listening, Reading, Writing, and Speaking).",
       description:
         "Strong grasp of complex grammar, varied vocabulary, and effective conversational recall.",
       criteriaProgress: {
@@ -80,6 +90,9 @@ export function evaluateCefrLevel(
       level: "B1",
       title: "Intermediate",
       ieltsBand: "5.0 – 5.5",
+      estimatedLevelLabel: "Estimated Learning Level",
+      disclaimer:
+        "Language foundation estimate based on vocabulary, grammar, and synonyms. (Official IELTS score requires verified testing in Listening, Reading, Writing, and Speaking).",
       description:
         "Comfortable with everyday communication, core tenses, and foundational expressions.",
       criteriaProgress: {
@@ -98,6 +111,9 @@ export function evaluateCefrLevel(
       level: "A2",
       title: "Elementary",
       ieltsBand: "4.0 – 4.5",
+      estimatedLevelLabel: "Estimated Learning Level",
+      disclaimer:
+        "Language foundation estimate based on vocabulary, grammar, and synonyms. (Official IELTS score requires verified testing in Listening, Reading, Writing, and Speaking).",
       description:
         "Growing familiarity with routine situations, essential verbs, and daily vocabulary.",
       criteriaProgress: {
@@ -115,6 +131,9 @@ export function evaluateCefrLevel(
     level: "A1",
     title: "Beginner",
     ieltsBand: "3.0 – 3.5",
+    estimatedLevelLabel: "Estimated Learning Level",
+    disclaimer:
+      "Language foundation estimate based on vocabulary, grammar, and synonyms. (Official IELTS score requires verified testing in Listening, Reading, Writing, and Speaking).",
     description:
       "Starting your English journey with fundamental words, basic structures, and everyday expressions.",
     criteriaProgress: {
@@ -163,6 +182,7 @@ export function calculateLongestStreak(dateKeys: string[]): number {
  */
 export async function getProgressAnalytics(
   userIdOverride?: Types.ObjectId,
+  period: PeriodFilter = "30d",
 ): Promise<ProgressAnalyticsDTO> {
   const owner = userIdOverride
     ? { userId: userIdOverride }
@@ -172,6 +192,7 @@ export async function getProgressAnalytics(
   const timezone = vocabularyTimezone();
   const now = new Date();
   const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const fourteenDaysAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
 
   // Parallel Database Queries across all 3 modules and sessions
   const [
@@ -251,7 +272,7 @@ export async function getProgressAnalytics(
       completedAt: { $ne: null },
     })
       .select(
-        "module completedAt totalQuestions answeredQuestions correctAnswers",
+        "module completedAt totalQuestions answeredQuestions correctAnswers activeStudySeconds",
       )
       .sort({ completedAt: 1 })
       .lean<StudySessionRecord[]>(),
@@ -424,11 +445,28 @@ export async function getProgressAnalytics(
       ? Math.round((grammarPracticedCount / totalGrammarTopics) * 100)
       : 0;
 
-  // 4. Session & Streak Calculations
+  // 4. Top Mistakes Queries for Weak Areas
+  const [topVocabMistakes, topSynMistakes] = await Promise.all([
+    VocabularyAttempt.aggregate<{ _id: Types.ObjectId; count: number }>([
+      { $match: { userId: owner.userId, isCorrect: false } },
+      { $group: { _id: "$vocabularyWordId", count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+      { $limit: 3 },
+    ]),
+    SynonymAttempt.aggregate<{ _id: Types.ObjectId; count: number }>([
+      { $match: { userId: owner.userId, isCorrect: false } },
+      { $group: { _id: "$synonymGroupId", count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+      { $limit: 3 },
+    ]),
+  ]);
+
+  // 5. Session & Streak Calculations
   const dateKeysList: string[] = [];
-  const moduleSessions = { vocabulary: 0, synonyms: 0, grammar: 0 };
+  const moduleSessions = { vocabulary: 0, synonyms: 0, grammar: 0, mixed: 0 };
   let totalQuestionsAnsweredAll = 0;
   let totalCorrectAnswersAll = 0;
+  let totalStudySecondsAll = 0;
 
   for (const s of sessions) {
     if (s.completedAt) {
@@ -437,10 +475,15 @@ export async function getProgressAnalytics(
     if (s.module === "VOCABULARY") moduleSessions.vocabulary += 1;
     else if (s.module === "SYNONYMS") moduleSessions.synonyms += 1;
     else if (s.module === "GRAMMAR") moduleSessions.grammar += 1;
+    else if (s.module === "MIXED") moduleSessions.mixed += 1;
 
-    totalQuestionsAnsweredAll += s.answeredQuestions || s.totalQuestions || 0;
+    const qCount = s.answeredQuestions || s.totalQuestions || 0;
+    totalQuestionsAnsweredAll += qCount;
     totalCorrectAnswersAll += s.correctAnswers || 0;
+    totalStudySecondsAll += s.activeStudySeconds || qCount * 40;
   }
+
+  const totalStudyMinutes = Math.round(totalStudySecondsAll / 60);
 
   const distinctDateKeys = Array.from(new Set(dateKeysList));
   const todayKey = dateKey(now, timezone);
@@ -455,6 +498,205 @@ export async function getProgressAnalytics(
     totalQuestionsAnsweredAll > 0
       ? Math.round((totalCorrectAnswersAll / totalQuestionsAnsweredAll) * 100)
       : 0;
+
+  const vocabularyAccuracy =
+    vocabAttemptsTotal > 0
+      ? Math.round((vocabAttemptsCorrect / vocabAttemptsTotal) * 100)
+      : 0;
+  const synonymAccuracy = synonymRecallAccuracy;
+  const grammarAccuracy = grammarOverallAccuracy;
+
+  // 6. Weekly Comparison (This week vs Last week)
+  const thisWeekSessions = sessions.filter(
+    (s) => s.completedAt && s.completedAt >= sevenDaysAgo,
+  );
+  const lastWeekSessions = sessions.filter(
+    (s) =>
+      s.completedAt &&
+      s.completedAt >= fourteenDaysAgo &&
+      s.completedAt < sevenDaysAgo,
+  );
+
+  const thisWeekDays = new Set(
+    thisWeekSessions.map((s) => dateKey(s.completedAt!, timezone)),
+  ).size;
+  const thisWeekQuestions = thisWeekSessions.reduce(
+    (sum, s) => sum + (s.answeredQuestions || s.totalQuestions || 0),
+    0,
+  );
+  const thisWeekCorrect = thisWeekSessions.reduce(
+    (sum, s) => sum + (s.correctAnswers || 0),
+    0,
+  );
+  const thisWeekAccuracy =
+    thisWeekQuestions > 0
+      ? Math.round((thisWeekCorrect / thisWeekQuestions) * 100)
+      : 0;
+  const thisWeekMinutes = Math.round(
+    thisWeekSessions.reduce(
+      (sum, s) =>
+        sum +
+        (s.activeStudySeconds ||
+          (s.answeredQuestions || s.totalQuestions || 0) * 40) /
+          60,
+      0,
+    ),
+  );
+
+  const lastWeekDays = new Set(
+    lastWeekSessions.map((s) => dateKey(s.completedAt!, timezone)),
+  ).size;
+  const lastWeekQuestions = lastWeekSessions.reduce(
+    (sum, s) => sum + (s.answeredQuestions || s.totalQuestions || 0),
+    0,
+  );
+  const lastWeekCorrect = lastWeekSessions.reduce(
+    (sum, s) => sum + (s.correctAnswers || 0),
+    0,
+  );
+  const lastWeekAccuracy =
+    lastWeekQuestions > 0
+      ? Math.round((lastWeekCorrect / lastWeekQuestions) * 100)
+      : 0;
+  const lastWeekMinutes = Math.round(
+    lastWeekSessions.reduce(
+      (sum, s) =>
+        sum +
+        (s.activeStudySeconds ||
+          (s.answeredQuestions || s.totalQuestions || 0) * 40) /
+          60,
+      0,
+    ),
+  );
+
+  const weeklyComparison: WeeklyComparisonDTO = {
+    thisWeek: {
+      studyDays: thisWeekDays,
+      questionsAnswered: thisWeekQuestions,
+      accuracy: thisWeekAccuracy,
+      studyMinutes: thisWeekMinutes,
+    },
+    lastWeek: {
+      studyDays: lastWeekDays,
+      questionsAnswered: lastWeekQuestions,
+      accuracy: lastWeekAccuracy,
+      studyMinutes: lastWeekMinutes,
+    },
+    diffDays: thisWeekDays - lastWeekDays,
+    diffQuestions: thisWeekQuestions - lastWeekQuestions,
+    diffAccuracy: thisWeekAccuracy - lastWeekAccuracy,
+  };
+
+  // 7. Weak Areas (Deterministic, Zero AI)
+  const weakAreas: WeakAreaItemDTO[] = [];
+  for (const t of challengingTopicsList.slice(0, 2)) {
+    weakAreas.push({
+      id: t.id,
+      module: "GRAMMAR",
+      title: t.title,
+      subtitle: "Grammar topic",
+      metric: `${t.accuracy}% accuracy`,
+      accuracy: t.accuracy,
+      linkHref: `/learn/grammar/${t.id}`,
+    });
+  }
+
+  if (topVocabMistakes.length > 0) {
+    const missedWords = await VocabularyWord.find({
+      _id: { $in: topVocabMistakes.map((m) => m._id) },
+      userId: owner.userId,
+    })
+      .select("word translation")
+      .lean();
+    const wordMap = new Map(missedWords.map((w) => [w._id.toString(), w]));
+    for (const vm of topVocabMistakes.slice(0, 2)) {
+      const w = wordMap.get(vm._id.toString());
+      if (w) {
+        weakAreas.push({
+          id: vm._id.toString(),
+          module: "VOCABULARY",
+          title: w.word,
+          subtitle: w.translation,
+          metric: `${vm.count} recent mistakes`,
+          mistakesCount: vm.count,
+          linkHref: `/vocabulary?search=${encodeURIComponent(w.word)}`,
+        });
+      }
+    }
+  }
+
+  if (topSynMistakes.length > 0) {
+    const missedGroups = await SynonymGroup.find({
+      _id: { $in: topSynMistakes.map((m) => m._id) },
+      userId: owner.userId,
+    })
+      .select("term meaning")
+      .lean();
+    const groupMap = new Map(missedGroups.map((g) => [g._id.toString(), g]));
+    for (const sm of topSynMistakes.slice(0, 1)) {
+      const g = groupMap.get(sm._id.toString());
+      if (g) {
+        weakAreas.push({
+          id: sm._id.toString(),
+          module: "SYNONYMS",
+          title: g.term,
+          subtitle: g.meaning || "Synonym group",
+          metric: `${sm.count} recent mistakes`,
+          mistakesCount: sm.count,
+          linkHref: `/synonyms?search=${encodeURIComponent(g.term)}`,
+        });
+      }
+    }
+  }
+
+  // 8. Recent Activity for Selected Period
+  const activityDaysCount = period === "7d" ? 7 : 30;
+  const recentActivity: ActivityDayDTO[] = [];
+  const dayActivityStats = new Map<
+    string,
+    { questions: number; correct: number; seconds: number }
+  >();
+
+  for (const s of sessions) {
+    if (!s.completedAt) continue;
+    const dk = dateKey(s.completedAt, timezone);
+    const existing = dayActivityStats.get(dk) || {
+      questions: 0,
+      correct: 0,
+      seconds: 0,
+    };
+    existing.questions += s.answeredQuestions || s.totalQuestions || 0;
+    existing.correct += s.correctAnswers || 0;
+    existing.seconds +=
+      s.activeStudySeconds ||
+      (s.answeredQuestions || s.totalQuestions || 0) * 40;
+    dayActivityStats.set(dk, existing);
+  }
+
+  for (let i = activityDaysCount - 1; i >= 0; i--) {
+    const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
+    const dk = dateKey(d, timezone);
+    const stats = dayActivityStats.get(dk) || {
+      questions: 0,
+      correct: 0,
+      seconds: 0,
+    };
+    const dayAccuracy =
+      stats.questions > 0
+        ? Math.round((stats.correct / stats.questions) * 100)
+        : 0;
+
+    recentActivity.push({
+      date: dk,
+      displayDate: d.toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+      }),
+      questionsAnswered: stats.questions,
+      accuracy: dayAccuracy,
+      studyMinutes: Math.round(stats.seconds / 60),
+    });
+  }
 
   // 5. 30-Day Activity Grid Construction
   const activityMap = new Map<
@@ -629,6 +871,7 @@ export async function getProgressAnalytics(
   }
 
   return {
+    period,
     mastery: {
       overallScore,
       cefr,
@@ -638,6 +881,10 @@ export async function getProgressAnalytics(
       totalSessionsCompleted: sessions.length,
       totalQuestionsAnswered: totalQuestionsAnsweredAll,
       overallAccuracy,
+      vocabularyAccuracy,
+      synonymAccuracy,
+      grammarAccuracy,
+      totalStudyMinutes,
       moduleSessionCounts: moduleSessions,
     },
     vocabulary: {
@@ -677,6 +924,9 @@ export async function getProgressAnalytics(
       challengingTopics: challengingTopicsList.slice(0, 5),
     },
     activity30Days,
+    recentActivity,
+    weeklyComparison,
+    weakAreas,
     recommendations,
   };
 }

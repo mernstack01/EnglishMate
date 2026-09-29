@@ -3,6 +3,7 @@ import { checkLearning } from "./learning-e2e";
 import { checkAiImageImport } from "./ai-import-e2e";
 import { checkSynonyms } from "./synonyms-e2e";
 import { checkGrammar } from "./grammar-e2e";
+import { checkDailyMixedLearning } from "./daily-learning-e2e";
 import { MongoMemoryServer } from "mongodb-memory-server";
 import mongoose from "mongoose";
 import { chromium, expect } from "@playwright/test";
@@ -179,10 +180,14 @@ async function main() {
       path: "test-results/dashboard-mobile.png",
       fullPage: true,
     });
-    for (const route of ["mistakes"]) {
-      await page.goto(`http://localhost:3107/${route}`);
-      await expect(page.getByText("GROWING SOON")).toBeVisible();
-    }
+    await page.goto("http://localhost:3107/mistakes");
+    await expect(
+      page.getByRole("heading", { name: /Mistake Book/i }),
+    ).toBeVisible();
+    await page.goto("http://localhost:3107/progress");
+    await expect(
+      page.getByRole("heading", { name: /Learning Progress/i }),
+    ).toBeVisible();
     console.log(
       "PASS theme persistence, mobile layout, all module empty states",
     );
@@ -206,6 +211,7 @@ async function main() {
     });
     await checkSynonyms({ page });
     await checkGrammar({ page });
+    await checkDailyMixedLearning({ page });
     const adminContext = await browser.newContext();
     const adminPage = await adminContext.newPage();
     await adminPage.goto("http://localhost:3107/login");

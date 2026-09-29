@@ -19,27 +19,42 @@ import { vocabularyStats } from "@/services/vocabulary";
 import { synonymStats } from "@/services/synonyms";
 import { grammarStats } from "@/services/grammar";
 import { calculateUserStreak } from "@/services/streak";
+import { buildDailyLearningPlan } from "@/services/daily-learning";
+import { getUnifiedMistakes } from "@/services/mistakes";
+import { StartDailyLearningButton } from "@/features/learning/components/start-daily-learning-button";
 import { StudySession } from "@/models/study-session";
 import { requireUser } from "@/lib/auth/current-user";
 import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { displayStat } from "@/features/progress/placeholder-stats";
 import { Types } from "mongoose";
 export const metadata: Metadata = { title: "Dashboard" };
 export default async function Dashboard() {
   const user = await requireUser();
   const userObjectId = new Types.ObjectId(user.id);
-  const [vocabulary, synonyms, grammar, currentStreak, studySessionsCount] =
-    await Promise.all([
-      vocabularyStats(),
-      synonymStats(),
-      grammarStats(),
-      calculateUserStreak(userObjectId),
-      StudySession.countDocuments({
-        userId: userObjectId,
-        completedAt: { $ne: null },
-      }),
-    ]);
+  const [
+    vocabulary,
+    synonyms,
+    grammar,
+    currentStreak,
+    studySessionsCount,
+    dailyPlan,
+    mistakesSummary,
+  ] = await Promise.all([
+    vocabularyStats(),
+    synonymStats(),
+    grammarStats(),
+    calculateUserStreak(userObjectId),
+    StudySession.countDocuments({
+      userId: userObjectId,
+      completedAt: { $ne: null },
+    }),
+    buildDailyLearningPlan(userObjectId),
+    getUnifiedMistakes(userObjectId),
+  ]);
+  const isDailyActive = Boolean(dailyPlan.activeSessionId);
+  const dailyProgressText = dailyPlan.activeSessionProgress
+    ? `${dailyPlan.activeSessionProgress.answered} / ${dailyPlan.activeSessionProgress.total}`
+    : undefined;
   return (
     <div className="space-y-8">
       <div className="flex flex-wrap items-end justify-between gap-4">
@@ -141,53 +156,78 @@ export default async function Dashboard() {
             <div className="p-6 sm:p-8">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-lg font-semibold">Today’s learning</h2>
-                <span className="rounded-md bg-primary/10 px-2 py-1 text-[10px] font-semibold tracking-wide text-primary">
-                  SPACED REPETITION ACTIVE
+                <span className="rounded-md bg-primary/10 px-2 py-1 text-[11px] font-semibold tracking-wide text-primary">
+                  {dailyPlan.totalCount} QUESTIONS · ~
+                  {dailyPlan.estimatedMinutes} MIN
                 </span>
               </div>
-              <div className="my-6 grid grid-cols-3 divide-x">
-                {[
-                  {
-                    label: "Vocabulary due",
-                    value: vocabulary.due,
-                    icon: BookOpen,
-                  },
-                  {
-                    label: "Synonyms due",
-                    value: synonyms.due,
-                    icon: Layers,
-                  },
-                  {
-                    label: "New words today",
-                    value: vocabulary.newToday,
-                    icon: Sparkles,
-                  },
-                ].map(({ label, value, icon: Icon }) => (
-                  <div
-                    key={label}
-                    className="px-2 text-center first:pl-0 last:pr-0"
-                  >
-                    <Icon className="mx-auto mb-3 size-5 text-primary" />
-                    <p className="text-2xl font-semibold">
-                      {displayStat(value)}
-                    </p>
-                    <p className="mt-1 text-[11px] text-muted-foreground sm:text-xs">
-                      {label}
-                    </p>
-                  </div>
-                ))}
+              <div className="my-6 grid grid-cols-3 divide-x border-y border-border/60 py-4 text-center">
+                <div>
+                  <BookOpen className="mx-auto mb-2 size-4 text-primary" />
+                  <p className="text-2xl font-bold">
+                    {dailyPlan.vocabularyCount}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground sm:text-xs">
+                    Vocabulary
+                  </p>
+                </div>
+                <div>
+                  <Layers className="mx-auto mb-2 size-4 text-purple-500" />
+                  <p className="text-2xl font-bold">
+                    {dailyPlan.synonymsCount}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground sm:text-xs">
+                    Synonyms
+                  </p>
+                </div>
+                <div>
+                  <Sparkles className="mx-auto mb-2 size-4 text-emerald-500" />
+                  <p className="text-2xl font-bold">{dailyPlan.grammarCount}</p>
+                  <p className="text-[11px] text-muted-foreground sm:text-xs">
+                    Grammar
+                  </p>
+                </div>
               </div>
-              <Button asChild className="w-full">
-                <Link href="/learn">
-                  Start learning <ArrowRight />
-                </Link>
-              </Button>
+              <div className="mb-6 flex items-center justify-between rounded-xl bg-secondary/40 px-4 py-2.5 text-xs">
+                <div>
+                  <p className="text-[11px] text-muted-foreground">
+                    New words today
+                  </p>
+                  <p className="text-sm font-semibold text-foreground">
+                    {displayStat(vocabulary.newToday)}
+                  </p>
+                </div>
+                <div className="h-6 w-px bg-border/60" />
+                <div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Vocabulary due
+                  </p>
+                  <p className="text-sm font-semibold text-foreground">
+                    {displayStat(vocabulary.due)}
+                  </p>
+                </div>
+                <div className="h-6 w-px bg-border/60" />
+                <div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Synonyms due
+                  </p>
+                  <p className="text-sm font-semibold text-foreground">
+                    {displayStat(synonyms.due)}
+                  </p>
+                </div>
+              </div>
+              <StartDailyLearningButton
+                isActive={isDailyActive}
+                progressText={dailyProgressText}
+                className="w-full"
+                size="lg"
+              />
               <p className="mt-3 text-center text-xs text-muted-foreground">
-                Daily spaced repetition is ready. Test your recall.
+                One-click commute session adapting to your memory and mistakes.
               </p>
             </div>
           </Card>
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-3 grid-cols-2 sm:grid-cols-4">
             {[
               {
                 label: "Current streak",
@@ -198,13 +238,23 @@ export default async function Dashboard() {
                     ? `${currentStreak} days active`
                     : "One day at a time",
                 color: "text-amber-600 bg-amber-500/10",
+                href: "/progress",
               },
               {
-                label: "Words learned",
-                icon: BookOpen,
-                value: vocabulary.learned,
-                hint: "A growing vocabulary",
-                color: "text-primary bg-secondary",
+                label: "Unresolved mistakes",
+                icon: CircleAlert,
+                value: mistakesSummary.unresolvedCount,
+                hint: "Needs review",
+                color: "text-rose-600 bg-rose-500/10",
+                href: "/mistakes",
+              },
+              {
+                label: "Due reviews",
+                icon: Clock3,
+                value: dailyPlan.dueCount,
+                hint: "Spaced repetition",
+                color: "text-primary bg-primary/10",
+                href: "/learn/today",
               },
               {
                 label: "Study sessions",
@@ -212,11 +262,13 @@ export default async function Dashboard() {
                 value: studySessionsCount,
                 hint: "Completed sessions",
                 color: "text-violet-500 bg-violet-500/10",
+                href: "/progress",
               },
-            ].map(({ label, icon: Icon, value, hint, color }) => (
-              <Card
+            ].map(({ label, icon: Icon, value, hint, color, href }) => (
+              <Link
                 key={label}
-                className="flex items-center gap-4 p-5 sm:block"
+                href={href}
+                className="flex items-center gap-4 rounded-xl border bg-card p-5 hover:border-primary/40 transition-colors sm:block"
               >
                 <span
                   className={`inline-flex size-9 items-center justify-center rounded-xl ${color}`}
@@ -232,7 +284,7 @@ export default async function Dashboard() {
                     {hint}
                   </p>
                 </div>
-              </Card>
+              </Link>
             ))}
           </div>
           <p className="text-xs text-muted-foreground">

@@ -236,6 +236,24 @@ test("database integration: empty state safety and multi-user isolation", async 
     assert.equal(analyticsA.mastery.currentStreak, 1);
     assert.equal(analyticsA.mastery.longestStreak, 1);
     assert.ok(analyticsA.mastery.overallScore > 0);
+    assert.equal(analyticsA.mastery.vocabularyAccuracy, 100);
+    assert.equal(analyticsA.mastery.synonymAccuracy, 0);
+    assert.equal(analyticsA.mastery.grammarAccuracy, 100);
+    assert.ok(analyticsA.mastery.totalStudyMinutes >= 0);
+
+    // Phase 7: Weekly comparison and recent activity
+    assert.ok(analyticsA.weeklyComparison);
+    assert.equal(analyticsA.weeklyComparison.thisWeek.studyDays, 1);
+    assert.equal(analyticsA.weeklyComparison.thisWeek.questionsAnswered, 1);
+    assert.ok(analyticsA.recentActivity.length > 0);
+
+    // Phase 7: Period filter support
+    const analytics7d = await getProgressAnalytics(userA, "7d");
+    assert.equal(analytics7d.period, "7d");
+    assert.equal(analytics7d.recentActivity.length, 7);
+
+    const analyticsAll = await getProgressAnalytics(userA, "all");
+    assert.equal(analyticsAll.period, "all");
   } finally {
     await mongoose.disconnect();
     await mongo.stop();

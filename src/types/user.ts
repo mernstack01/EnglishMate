@@ -6,4 +6,5 @@ export interface CurrentUser {
   email: string;
   role: Role;
   preferredLanguage: Language;
+  dailyQuestionGoal: 10 | 15 | 20 | 30 | 40;
 }

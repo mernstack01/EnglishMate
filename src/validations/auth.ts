@@ -25,9 +25,18 @@ export const loginSchema = z.object({
   email: emailSchema,
   password: z.string().min(1, "Enter your password.").max(128),
 });
-export const settingsSchema = registerSchema
-  .pick({ name: true })
-  .extend({ preferredLanguage: z.enum(["UZ", "EN"]) });
+export const settingsSchema = registerSchema.pick({ name: true }).extend({
+  preferredLanguage: z.enum(["UZ", "EN"]),
+  dailyQuestionGoal: z.coerce
+    .number()
+    .int()
+    .refine(
+      (val): val is 10 | 15 | 20 | 30 | 40 =>
+        [10, 15, 20, 30, 40].includes(val),
+      "Goal must be 10, 15, 20, 30, or 40 questions.",
+    )
+    .default(20),
+});
 export const usersQuerySchema = z.object({
   q: z.string().trim().max(100).default(""),
   status: z.enum(["all", "active", "inactive"]).default("all"),

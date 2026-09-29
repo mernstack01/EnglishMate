@@ -192,4 +192,5 @@ PLAYWRIGHT_CHROME=1 pnpm test:e2e
 The integration script downloads a test-only MongoDB binary on its first run, starts a disposable database, launches the production app on port 3107, and exercises real browser flows. It does not use or alter `.env.local` or your configured database. It checks registration, uniqueness, login, safe sessions, route protection, settings, themes, mobile layout, all empty pages, admin search/pagination/filtering, deactivation of an existing session, reactivation, and logout. Screenshots go to ignored `test-results/`. The browser and database are shut down afterward. Tests need permission to start local servers.
 
 Phase 2 vocabulary and spaced repetition are intentionally outside this release.
+
 # EnglishMate

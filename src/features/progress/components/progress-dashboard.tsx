@@ -50,6 +50,42 @@ export function ProgressDashboard({ data }: ProgressDashboardProps) {
 
   return (
     <div className="space-y-8">
+      {/* Period Filter Tabs */}
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b pb-4">
+        <div>
+          <h2 className="text-sm font-semibold tracking-tight">Time Period</h2>
+          <p className="text-xs text-muted-foreground">
+            Filter performance and streaks
+          </p>
+        </div>
+        <div className="flex items-center gap-1.5 rounded-xl border bg-card p-1">
+          <Button
+            asChild
+            variant={data.period === "7d" ? "secondary" : "ghost"}
+            size="sm"
+            className="text-xs h-8"
+          >
+            <Link href="/progress?period=7d">7 Days</Link>
+          </Button>
+          <Button
+            asChild
+            variant={data.period === "30d" ? "secondary" : "ghost"}
+            size="sm"
+            className="text-xs h-8"
+          >
+            <Link href="/progress?period=30d">30 Days</Link>
+          </Button>
+          <Button
+            asChild
+            variant={data.period === "all" ? "secondary" : "ghost"}
+            size="sm"
+            className="text-xs h-8"
+          >
+            <Link href="/progress?period=all">All Time</Link>
+          </Button>
+        </div>
+      </div>
+
       {/* 1. HERO MASTERY CARD */}
       <div className="relative overflow-hidden rounded-2xl border bg-gradient-to-br from-card via-card to-primary/5 p-6 sm:p-8 shadow-sm">
         <div className="relative z-10 grid gap-6 md:grid-cols-12 md:items-center">
@@ -95,10 +131,16 @@ export function ProgressDashboard({ data }: ProgressDashboardProps) {
                 </span>
               </div>
               <h2 className="text-lg font-bold text-foreground sm:text-xl">
-                IELTS {mastery.cefr.ieltsBand} Equivalent
+                Estimated Learning Level · CEFR {mastery.cefr.level}
               </h2>
               <p className="text-xs text-muted-foreground line-clamp-2">
-                {mastery.cefr.description}
+                Approx. IELTS {mastery.cefr.ieltsBand} target foundation
+                (Vocabulary, Grammar & Synonyms). {mastery.cefr.description}
+              </p>
+              <p className="text-[11px] text-muted-foreground/80 italic pt-0.5">
+                * Note: Language foundation estimate based on practice activity.
+                Official IELTS score requires verified 4-skill testing
+                (Listening, Reading, Writing, Speaking).
               </p>
             </div>
           </div>
@@ -137,10 +179,13 @@ export function ProgressDashboard({ data }: ProgressDashboardProps) {
             <div className="rounded-xl border bg-background/50 p-3.5 backdrop-blur-xs">
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <Zap className="size-3.5 text-primary" />
-                <span>Sessions</span>
+                <span>Study Time</span>
               </div>
               <p className="mt-1 text-xl font-bold text-foreground">
-                {mastery.totalSessionsCompleted}
+                {mastery.totalStudyMinutes}{" "}
+                <span className="text-xs font-normal text-muted-foreground">
+                  min
+                </span>
               </p>
               <p className="text-[10px] text-muted-foreground">
                 {mastery.activeDaysCount} active days
@@ -163,6 +208,128 @@ export function ProgressDashboard({ data }: ProgressDashboardProps) {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Weekly Summary & Weak Areas Grid */}
+      <div className="grid gap-4 md:grid-cols-2">
+        {/* Weekly Summary */}
+        <Card className="p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-primary">
+              This Week Summary
+            </span>
+            <span className="text-xs text-muted-foreground">Last 7 days</span>
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 pt-1">
+            <div className="rounded-lg bg-secondary/40 p-2.5 text-center">
+              <p className="text-lg font-bold">
+                {data.weeklyComparison.thisWeek.studyDays}
+              </p>
+              <p className="text-[10px] text-muted-foreground">Study days</p>
+            </div>
+            <div className="rounded-lg bg-secondary/40 p-2.5 text-center">
+              <p className="text-lg font-bold">
+                {data.weeklyComparison.thisWeek.questionsAnswered}
+              </p>
+              <p className="text-[10px] text-muted-foreground">Questions</p>
+            </div>
+            <div className="rounded-lg bg-secondary/40 p-2.5 text-center">
+              <p className="text-lg font-bold text-primary">
+                {data.weeklyComparison.thisWeek.accuracy}%
+              </p>
+              <p className="text-[10px] text-muted-foreground">Accuracy</p>
+            </div>
+            <div className="rounded-lg bg-secondary/40 p-2.5 text-center">
+              <p className="text-lg font-bold">
+                {data.weeklyComparison.thisWeek.studyMinutes}m
+              </p>
+              <p className="text-[10px] text-muted-foreground">Time</p>
+            </div>
+          </div>
+          <div className="pt-2 border-t text-xs text-muted-foreground flex flex-wrap gap-x-4 gap-y-1">
+            <span>
+              vs prev week:{" "}
+              <strong
+                className={
+                  data.weeklyComparison.diffDays >= 0
+                    ? "text-emerald-600 dark:text-emerald-400"
+                    : "text-rose-600"
+                }
+              >
+                {data.weeklyComparison.diffDays >= 0
+                  ? `+${data.weeklyComparison.diffDays}`
+                  : data.weeklyComparison.diffDays}{" "}
+                study days
+              </strong>
+            </span>
+            <span>
+              <strong
+                className={
+                  data.weeklyComparison.diffQuestions >= 0
+                    ? "text-emerald-600 dark:text-emerald-400"
+                    : "text-rose-600"
+                }
+              >
+                {data.weeklyComparison.diffQuestions >= 0
+                  ? `+${data.weeklyComparison.diffQuestions}`
+                  : data.weeklyComparison.diffQuestions}{" "}
+                questions
+              </strong>
+            </span>
+          </div>
+        </Card>
+
+        {/* Weak Areas ("Needs Attention") */}
+        <Card className="p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400 flex items-center gap-1.5">
+              <AlertTriangle className="size-3.5" /> Needs Attention
+            </span>
+            <span className="text-xs text-muted-foreground">
+              Data-backed weak areas
+            </span>
+          </div>
+          {data.weakAreas && data.weakAreas.length > 0 ? (
+            <div className="space-y-2 pt-1">
+              {data.weakAreas.map((item, idx) => (
+                <div
+                  key={item.id}
+                  className="flex items-center justify-between py-1.5 border-b border-border/40 text-xs last:border-0"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-muted-foreground">
+                      {idx + 1}.
+                    </span>
+                    <div>
+                      <p className="font-bold text-foreground">{item.title}</p>
+                      <p className="text-[10px] text-muted-foreground">
+                        {item.subtitle}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-rose-600 dark:text-rose-400">
+                      {item.metric}
+                    </span>
+                    <Button
+                      asChild
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-[10px]"
+                    >
+                      <Link href={item.linkHref}>Practice</Link>
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground pt-3">
+              No weak areas identified. All practiced topics and words are
+              currently performing strongly!
+            </p>
+          )}
+        </Card>
       </div>
 
       {/* 2. TABBED CONTROLS */}
@@ -359,10 +526,10 @@ export function ProgressDashboard({ data }: ProgressDashboardProps) {
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary">
-                    <TrendingUp className="size-4" /> Grammar Pillar
+                    <TrendingUp className="size-4" /> Grammar Mastery
                   </span>
                   <span className="text-xs font-bold text-foreground">
-                    {grammar.overallAccuracy}% accuracy
+                    <span>Grammar Accuracy</span>: {grammar.overallAccuracy}%
                   </span>
                 </div>
                 <h3 className="text-2xl font-black text-foreground">
@@ -379,7 +546,7 @@ export function ProgressDashboard({ data }: ProgressDashboardProps) {
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span>Exercises attempted:</span>
+                    <span>Exercises Practiced:</span>
                     <span className="font-semibold text-foreground">
                       {grammar.totalAttempts}
                     </span>

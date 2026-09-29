@@ -11,7 +11,7 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
   if (!session?.user.id) return null;
   await connectDB();
   const user = await User.findById(session.user.id)
-    .select("name email role preferredLanguage isActive")
+    .select("name email role preferredLanguage dailyQuestionGoal isActive")
     .lean();
   if (!user?.isActive) return null;
   return {
@@ -20,6 +20,7 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
     email: user.email,
     role: user.role,
     preferredLanguage: user.preferredLanguage,
+    dailyQuestionGoal: (user.dailyQuestionGoal as 10 | 15 | 20 | 30 | 40) || 20,
   };
 });
 export async function requireUser() {

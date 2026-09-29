@@ -6,6 +6,7 @@ export interface UserRecord {
   role: "USER" | "ADMIN";
   isActive: boolean;
   preferredLanguage: "UZ" | "EN";
+  dailyQuestionGoal: 10 | 15 | 20 | 30 | 40;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -31,6 +32,12 @@ const userSchema = new Schema<UserRecord>(
       type: String,
       enum: ["UZ", "EN"],
       default: "EN",
+      required: true,
+    },
+    dailyQuestionGoal: {
+      type: Number,
+      enum: [10, 15, 20, 30, 40],
+      default: 20,
       required: true,
     },
   },

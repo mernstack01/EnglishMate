@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { requireUser } from "@/lib/auth/current-user";
 import { getProgressAnalytics } from "@/services/progress";
 import { ProgressDashboard } from "@/features/progress/components/progress-dashboard";
+import type { PeriodFilter } from "@/types/progress";
 
 export const metadata: Metadata = {
   title: "Learning Progress & Analytics",
@@ -9,9 +10,17 @@ export const metadata: Metadata = {
     "Comprehensive mastery analytics across vocabulary, synonyms, and grammar",
 };
 
-export default async function ProgressPage() {
+interface PageProps {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}
+
+export default async function ProgressPage({ searchParams }: PageProps) {
   await requireUser();
-  const analytics = await getProgressAnalytics();
+  const params = await searchParams;
+  const rawPeriod = typeof params.period === "string" ? params.period : "30d";
+  const period: PeriodFilter =
+    rawPeriod === "7d" || rawPeriod === "all" ? rawPeriod : "30d";
+  const analytics = await getProgressAnalytics(undefined, period);
 
   return (
     <div className="space-y-8">
