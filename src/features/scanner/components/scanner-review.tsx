@@ -25,6 +25,7 @@ import type {
   ScanResult,
 } from "../types";
 import { ScannerOverlay } from "./scanner-overlay";
+import { ScannerDiagnosticsPanel } from "./scanner-diagnostics-panel";
 
 interface ScannerReviewProps {
   imageSrc: string;
@@ -207,20 +208,54 @@ export function ScannerReview({
           </Button>
         </div>
 
-        <div className="relative flex max-h-[400px] w-full items-center justify-center overflow-hidden rounded-2xl border bg-black/5 dark:bg-black/40">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={imageSrc}
-            alt="Scanned textbook with detected marks"
-            className="max-h-[380px] w-auto max-w-full rounded-xl object-contain p-1"
-          />
+        <div className="flex max-h-[460px] w-full items-center justify-center overflow-auto rounded-2xl border bg-black/5 p-2 dark:bg-black/40">
+          <div className="relative inline-block overflow-hidden rounded-xl leading-none">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={scanResult.processedImageUrl || imageSrc}
+              alt="Scanned textbook with detected marks"
+              className="max-h-[420px] w-auto max-w-full rounded-xl object-contain block"
+            />
 
-          {showOverlay && (
-            <div className="pointer-events-none absolute inset-0">
-              <ScannerOverlay scanResult={scanResult} />
-            </div>
-          )}
+            {showOverlay && (
+              <div className="pointer-events-none absolute inset-0 size-full">
+                <ScannerOverlay scanResult={scanResult} />
+              </div>
+            )}
+          </div>
         </div>
+
+        {/* Overlay Legend */}
+        {showOverlay && (
+          <div className="flex flex-wrap items-center gap-3 px-1 py-1 text-xs text-muted-foreground">
+            <span className="font-semibold text-foreground">Legend:</span>
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block size-3 rounded border border-dashed border-slate-400" />
+              OCR Boxes
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block size-3 rounded bg-yellow-400/50 border border-yellow-500" />
+              Highlights
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block w-4 h-1 bg-blue-600 rounded" />
+              Underlines
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block size-3 rounded border-2 border-fuchsia-500" />
+              Circles/Boxes
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block size-3 rounded border-2 border-emerald-500" />
+              Matched Words
+            </span>
+          </div>
+        )}
+
+        {/* Development Diagnostics Panel */}
+        {scanResult.diagnostics && (
+          <ScannerDiagnosticsPanel diagnostics={scanResult.diagnostics} />
+        )}
       </div>
 
       {/* Import Success / Summary Card */}

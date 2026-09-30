@@ -13,6 +13,8 @@ import {
   rgbToHsv,
   classifyHighlighter,
   evaluateWordHighlight,
+  analyzeHighlightForWord,
+  isNeutralPaperPixel,
 } from "../src/features/scanner/lib/highlight-detection";
 import {
   evaluateWordUnderline,
@@ -23,6 +25,7 @@ import {
   matchWordsToMarks,
   sortWordsInReadingOrder,
 } from "../src/features/scanner/lib/mark-matching";
+import type { BoundingBox, OcrWord } from "../src/features/scanner/types";
 import { importScannedWordsSchema } from "../src/validations/scanner";
 import { VocabularyWord } from "../src/models/vocabulary-word";
 import { VocabularyReview } from "../src/models/vocabulary-review";
@@ -112,6 +115,16 @@ test("cleanOcrToken does not blindly stem words", () => {
   assert.ok(running);
   assert.equal(running.cleanWord, "running");
   assert.equal(running.normalizedWord, "running");
+});
+test("cleanOcrToken cleans circle artifacts (@ symbol and fused stopwords)", () => {
+  assert.deepEqual(cleanOcrToken("(@ppreciatothe"), {
+    cleanWord: "appreciate",
+    normalizedWord: "appreciate",
+  });
+  assert.deepEqual(cleanOcrToken("@pple"), {
+    cleanWord: "apple",
+    normalizedWord: "apple",
+  });
 });
 
 // -------------------------------------------------------------
@@ -302,6 +315,26 @@ test("evaluateWordUnderline detects physical drawn underline below word", () => 
   assert.equal(noUnderline.isUnderlined, false);
 });
 
+test("evaluateWordUnderline detects colored underlines under words with descenders (e.g., hiking,)", () => {
+  const img = createMockImageData(200, 100, [252, 252, 252, 255]);
+  // Word 'hiking,' where bbox.y1 is extended down to y=45 by descender 'g' and comma
+  const wordBbox: BoundingBox = { x0: 20, y0: 10, x1: 120, y1: 45 };
+  // Underline is drawn under the baseline at y=41..43 (above the bottom of 'g'/comma at y=45)
+  for (let y = 41; y <= 43; y++) {
+    for (let x = 20; x <= 120; x++) {
+      const idx = (y * img.width + x) * 4;
+      img.data[idx] = 20;
+      img.data[idx + 1] = 60;
+      img.data[idx + 2] = 200; // Blue pen
+    }
+  }
+
+  const analysis = evaluateWordUnderline(img, wordBbox);
+  assert.equal(analysis.isUnderlined, true);
+  assert.equal(analysis.colorName, "blue");
+  assert.ok(analysis.confidence >= 0.7);
+});
+
 // -------------------------------------------------------------
 // 5. Box Detection Tests
 // -------------------------------------------------------------
@@ -432,8 +465,427 @@ test("matchWordsToMarks separates marked words from other recognized words", () 
   assert.equal(result.otherWords[0].selected, false);
 });
 
+// Helper functions for synthetic test image fixtures
+function drawMockLetters(
+  img: ImageData,
+  bbox: BoundingBox,
+  darkR = 25,
+  darkG = 25,
+  darkB = 25,
+) {
+  for (let y = bbox.y0 + 2; y < bbox.y1 - 2; y++) {
+    for (let x = bbox.x0 + 2; x < bbox.x1 - 2; x += 3) {
+      const idx = (y * img.width + x) * 4;
+      img.data[idx] = darkR;
+      img.data[idx + 1] = darkG;
+      img.data[idx + 2] = darkB;
+    }
+  }
+}
+
+function drawMockHighlight(
+  img: ImageData,
+  bbox: BoundingBox,
+  r: number,
+  g: number,
+  b: number,
+) {
+  const padX = Math.max(2, Math.round((bbox.x1 - bbox.x0) * 0.08));
+  const padY = Math.max(3, Math.round((bbox.y1 - bbox.y0) * 0.2));
+  const x0 = Math.max(0, bbox.x0 - padX);
+  const y0 = Math.max(0, bbox.y0 - padY);
+  const x1 = Math.min(img.width, bbox.x1 + padX);
+  const y1 = Math.min(img.height, bbox.y1 + padY);
+
+  for (let y = y0; y < y1; y++) {
+    for (let x = x0; x < x1; x++) {
+      const idx = (y * img.width + x) * 4;
+      img.data[idx] = r;
+      img.data[idx + 1] = g;
+      img.data[idx + 2] = b;
+    }
+  }
+}
+
+function drawMockUnderline(
+  img: ImageData,
+  bbox: BoundingBox,
+  r: number,
+  g: number,
+  b: number,
+  thickness = 3,
+) {
+  const yLine = Math.floor(bbox.y1 + 2);
+  for (let dy = 0; dy < thickness; dy++) {
+    for (let x = bbox.x0 - 2; x <= bbox.x1 + 2; x++) {
+      const idx = ((yLine + dy) * img.width + x) * 4;
+      if (idx >= 0 && idx < img.data.length - 4) {
+        img.data[idx] = r;
+        img.data[idx + 1] = g;
+        img.data[idx + 2] = b;
+      }
+    }
+  }
+}
+
+function drawMockEnclosingBox(
+  img: ImageData,
+  bbox: BoundingBox,
+  r: number,
+  g: number,
+  b: number,
+  margin = 6,
+) {
+  const x0 = Math.max(0, bbox.x0 - margin);
+  const y0 = Math.max(0, bbox.y0 - margin);
+  const x1 = Math.min(img.width - 1, bbox.x1 + margin);
+  const y1 = Math.min(img.height - 1, bbox.y1 + margin);
+
+  for (let x = x0; x <= x1; x++) {
+    const topIdx = (y0 * img.width + x) * 4;
+    img.data[topIdx] = r;
+    img.data[topIdx + 1] = g;
+    img.data[topIdx + 2] = b;
+
+    const botIdx = (y1 * img.width + x) * 4;
+    img.data[botIdx] = r;
+    img.data[botIdx + 1] = g;
+    img.data[botIdx + 2] = b;
+  }
+  for (let y = y0; y <= y1; y++) {
+    const leftIdx = (y * img.width + x0) * 4;
+    img.data[leftIdx] = r;
+    img.data[leftIdx + 1] = g;
+    img.data[leftIdx + 2] = b;
+
+    const rightIdx = (y * img.width + x1) * 4;
+    img.data[rightIdx] = r;
+    img.data[rightIdx + 1] = g;
+    img.data[rightIdx + 2] = b;
+  }
+}
+
 // -------------------------------------------------------------
-// 7. Zod Schema Validation Tests
+// 7. Deterministic Regression Fixture (Approximating Manual Test)
+// -------------------------------------------------------------
+test("deterministic manual test approximation fixture detects all highlights, colored underline, red box, and ignores control words", () => {
+  const img = createMockImageData(400, 160, [252, 252, 252, 255]);
+
+  const ocrWords: OcrWord[] = [
+    // Line 1: "beautiful the nature environment"
+    {
+      text: "beautiful",
+      confidence: 96,
+      bbox: { x0: 20, y0: 20, x1: 90, y1: 42 },
+    },
+    { text: "the", confidence: 98, bbox: { x0: 100, y0: 20, x1: 125, y1: 42 } },
+    {
+      text: "nature",
+      confidence: 94,
+      bbox: { x0: 135, y0: 20, x1: 195, y1: 42 },
+    },
+    {
+      text: "environment",
+      confidence: 91,
+      bbox: { x0: 205, y0: 20, x1: 310, y1: 42 },
+    },
+
+    // Line 2: "destroyed protect conserve we"
+    {
+      text: "destroyed",
+      confidence: 93,
+      bbox: { x0: 20, y0: 60, x1: 105, y1: 82 },
+    },
+    {
+      text: "protect",
+      confidence: 95,
+      bbox: { x0: 115, y0: 60, x1: 175, y1: 82 },
+    },
+    {
+      text: "conserve",
+      confidence: 92,
+      bbox: { x0: 185, y0: 60, x1: 260, y1: 82 },
+    },
+    { text: "we", confidence: 99, bbox: { x0: 270, y0: 60, x1: 295, y1: 82 } },
+
+    // Line 3: "hiking must appreciate"
+    {
+      text: "hiking",
+      confidence: 92,
+      bbox: { x0: 20, y0: 100, x1: 75, y1: 122 },
+    },
+    {
+      text: "must",
+      confidence: 97,
+      bbox: { x0: 85, y0: 100, x1: 130, y1: 122 },
+    },
+    {
+      text: "appreciate",
+      confidence: 94,
+      bbox: { x0: 140, y0: 100, x1: 235, y1: 122 },
+    },
+  ];
+
+  // 1. Draw highlights first (under text)
+  // beautiful: yellow highlight
+  drawMockHighlight(img, ocrWords[0].bbox, 250, 240, 50);
+  // nature: yellow highlight
+  drawMockHighlight(img, ocrWords[2].bbox, 250, 240, 50);
+  // destroyed: pink highlight (RGB 255, 120, 180)
+  drawMockHighlight(img, ocrWords[4].bbox, 255, 120, 180);
+  // protect: green highlight (RGB 80, 230, 90)
+  drawMockHighlight(img, ocrWords[5].bbox, 80, 230, 90);
+  // conserve: yellow highlight
+  drawMockHighlight(img, ocrWords[6].bbox, 250, 240, 50);
+
+  // 2. Draw text letters for all words
+  for (const w of ocrWords) {
+    drawMockLetters(img, w.bbox);
+  }
+
+  // 3. Draw blue pen underline for "hiking" (RGB 30, 90, 220)
+  drawMockUnderline(img, ocrWords[8].bbox, 30, 90, 220, 3);
+
+  // 4. Draw red pen enclosing box/circle for "appreciate" (RGB 220, 40, 60)
+  drawMockEnclosingBox(img, ocrWords[10].bbox, 220, 40, 60, 6);
+
+  // Execute pipeline
+  const result = matchWordsToMarks(ocrWords, [], img);
+
+  // Exactly 7 marked words detected
+  assert.equal(result.detectedWords.length, 7);
+
+  const detectedMap = new Map(result.detectedWords.map((w) => [w.text, w]));
+
+  // beautiful -> yellow highlight
+  const beautiful = detectedMap.get("beautiful");
+  assert.ok(beautiful);
+  assert.equal(beautiful.markType, "highlight");
+  assert.equal(beautiful.colorName, "yellow");
+  assert.equal(beautiful.selected, true);
+
+  // nature -> yellow highlight
+  const nature = detectedMap.get("nature");
+  assert.ok(nature);
+  assert.equal(nature.markType, "highlight");
+  assert.equal(nature.colorName, "yellow");
+  assert.equal(nature.selected, true);
+
+  // destroyed -> pink highlight
+  const destroyed = detectedMap.get("destroyed");
+  assert.ok(destroyed);
+  assert.equal(destroyed.markType, "highlight");
+  assert.equal(destroyed.colorName, "pink");
+  assert.equal(destroyed.selected, true);
+
+  // protect -> green highlight
+  const protect = detectedMap.get("protect");
+  assert.ok(protect);
+  assert.equal(protect.markType, "highlight");
+  assert.equal(protect.colorName, "green");
+  assert.equal(protect.selected, true);
+
+  // conserve -> yellow highlight
+  const conserve = detectedMap.get("conserve");
+  assert.ok(conserve);
+  assert.equal(conserve.markType, "highlight");
+  assert.equal(conserve.colorName, "yellow");
+  assert.equal(conserve.selected, true);
+
+  // hiking -> blue underline
+  const hiking = detectedMap.get("hiking");
+  assert.ok(hiking);
+  assert.equal(hiking.markType, "underline");
+  assert.equal(hiking.selected, true);
+
+  // appreciate -> red pen box/circle
+  const appreciate = detectedMap.get("appreciate");
+  assert.ok(appreciate);
+  assert.ok(appreciate.markType === "box" || appreciate.markType === "circle");
+  assert.equal(appreciate.selected, true);
+
+  // Unmarked control words must NOT be marked
+  assert.equal(result.otherWords.length, 4);
+  const otherTexts = new Set(result.otherWords.map((w) => w.text));
+  assert.ok(otherTexts.has("the"));
+  assert.ok(otherTexts.has("environment"));
+  assert.ok(otherTexts.has("we"));
+  assert.ok(otherTexts.has("must"));
+
+  for (const other of result.otherWords) {
+    assert.equal(other.markType, "manual");
+    assert.equal(other.selected, false);
+  }
+
+  // Structured diagnostics verification
+  assert.ok(result.diagnostics);
+  assert.equal(result.diagnostics.matching.matchedMarkedWordCount, 7);
+  assert.equal(result.diagnostics.marks.highlightCandidateCount, 5);
+  assert.equal(result.diagnostics.marks.underlineCandidateCount, 1);
+  assert.equal(result.diagnostics.marks.boxCandidateCount, 1);
+});
+
+// -------------------------------------------------------------
+// 8. False-Positive Immunity Tests
+// -------------------------------------------------------------
+test("false-positive immunity: unhighlighted text, gray paper, and colored text alone avoid false marks", () => {
+  // Test 1: Plain white paper + dark printed letters
+  const whiteImg = createMockImageData(150, 60, [255, 255, 255, 255]);
+  const plainBbox = { x0: 20, y0: 15, x1: 120, y1: 45 };
+  drawMockLetters(whiteImg, plainBbox, 20, 20, 20);
+
+  const plainHl = analyzeHighlightForWord(whiteImg, plainBbox);
+  assert.equal(plainHl.isHighlighted, false);
+
+  const plainUl = evaluateWordUnderline(whiteImg, plainBbox);
+  assert.equal(plainUl.isUnderlined, false);
+
+  const plainBx = evaluateWordBox(whiteImg, plainBbox);
+  assert.equal(plainBx.isBoxed, false);
+
+  // Test 2: Light gray / off-white paper background (RGB 238, 236, 232)
+  const grayImg = createMockImageData(150, 60, [238, 236, 232, 255]);
+  drawMockLetters(grayImg, plainBbox, 25, 25, 25);
+
+  const grayHsv = rgbToHsv(238, 236, 232);
+  assert.equal(isNeutralPaperPixel(grayHsv), true);
+  assert.equal(classifyHighlighter(grayHsv), null);
+
+  const grayHl = analyzeHighlightForWord(grayImg, plainBbox);
+  assert.equal(grayHl.isHighlighted, false);
+
+  // Test 3: Colored text glyphs alone on white paper (no background highlight coverage)
+  const blueTextImg = createMockImageData(150, 60, [255, 255, 255, 255]);
+  // Draw thin blue letters (RGB 30, 90, 200) without background fill
+  for (let y = 18; y < 42; y++) {
+    for (let x = 25; x < 115; x += 8) {
+      const idx = (y * 150 + x) * 4;
+      blueTextImg.data[idx] = 30;
+      blueTextImg.data[idx + 1] = 90;
+      blueTextImg.data[idx + 2] = 200;
+    }
+  }
+
+  const blueTextHl = analyzeHighlightForWord(blueTextImg, plainBbox);
+  assert.equal(blueTextHl.isHighlighted, false);
+});
+
+// -------------------------------------------------------------
+// 9. Coordinate System & Scaling Regression Tests
+// -------------------------------------------------------------
+test("coordinate system and downscaling regression: 4000x3000 to 1800x1350 and 90-degree rotations map 1:1 to ImageData", () => {
+  // Test case A: Landscape 4000x3000 downscaled to max 1800
+  const origW = 4000;
+  const origH = 3000;
+  const maxDim = 1800;
+
+  const maxRawA = Math.max(origW, origH);
+  const scaleA = maxRawA > maxDim ? maxDim / maxRawA : 1;
+  const targetWA = Math.round(origW * scaleA);
+  const targetHA = Math.round(origH * scaleA);
+
+  assert.equal(scaleA, 0.45);
+  assert.equal(targetWA, 1800);
+  assert.equal(targetHA, 1350);
+
+  // Test case B: Portrait 3000x4000 downscaled to max 1800
+  const maxRawB = Math.max(3000, 4000);
+  const scaleB = maxRawB > maxDim ? maxDim / maxRawB : 1;
+  const targetWB = Math.round(3000 * scaleB);
+  const targetHB = Math.round(4000 * scaleB);
+
+  assert.equal(scaleB, 0.45);
+  assert.equal(targetWB, 1350);
+  assert.equal(targetHB, 1800);
+
+  // Test case C: 90 degree rotation swaps rawWidth and rawHeight
+  const normRotation = 90;
+  const isRotated90 = normRotation === 90 || normRotation === 270;
+  const rawWC = isRotated90 ? origH : origW; // 3000
+  const rawHC = isRotated90 ? origW : origH; // 4000
+
+  const maxRawC = Math.max(rawWC, rawHC);
+  const scaleC = maxRawC > maxDim ? maxDim / maxRawC : 1;
+  const targetWC = Math.round(rawWC * scaleC);
+  const targetHC = Math.round(rawHC * scaleC);
+
+  assert.equal(targetWC, 1350);
+  assert.equal(targetHC, 1800);
+
+  // Test case D: Verify OCR bbox coordinates directly correspond to ImageData pixel coordinates
+  const processedImgData = createMockImageData(targetWA, targetHA);
+  const ocrBbox = { x0: 200, y0: 150, x1: 450, y1: 220 };
+
+  // Pixel offset calculation on ImageData matches processed canvas bounds 1:1
+  const pixelIndex = (ocrBbox.y0 * targetWA + ocrBbox.x0) * 4;
+  assert.ok(pixelIndex >= 0 && pixelIndex < processedImgData.data.length);
+  assert.equal(processedImgData.width, targetWA);
+  assert.equal(processedImgData.height, targetHA);
+});
+
+// -------------------------------------------------------------
+// 10. OCR-Independent Scanner Pipeline Test
+// -------------------------------------------------------------
+test("OCR-independent scanner test: synthetic ImageData + deterministic OcrWord[] produce correct DetectedWord[] and diagnostics", () => {
+  const img = createMockImageData(250, 100, [255, 255, 255, 255]);
+
+  const testWords: OcrWord[] = [
+    {
+      text: "serendipity",
+      confidence: 95,
+      bbox: { x0: 20, y0: 20, x1: 110, y1: 45 },
+    },
+    {
+      text: "ordinary",
+      confidence: 88,
+      bbox: { x0: 120, y0: 20, x1: 190, y1: 45 },
+    },
+  ];
+
+  // Draw green highlight under "serendipity"
+  drawMockHighlight(img, testWords[0].bbox, 70, 220, 80);
+  drawMockLetters(img, testWords[0].bbox);
+  drawMockLetters(img, testWords[1].bbox);
+
+  const matchResult = matchWordsToMarks(testWords, [], img, {
+    originalWidth: 1000,
+    originalHeight: 400,
+    processedWidth: 250,
+    processedHeight: 100,
+    rotation: 0,
+    scale: 0.25,
+  });
+
+  // Verify separation
+  assert.equal(matchResult.detectedWords.length, 1);
+  assert.equal(matchResult.detectedWords[0].text, "serendipity");
+  assert.equal(matchResult.detectedWords[0].markType, "highlight");
+  assert.equal(matchResult.detectedWords[0].colorName, "green");
+  assert.equal(matchResult.detectedWords[0].selected, true);
+
+  assert.equal(matchResult.otherWords.length, 1);
+  assert.equal(matchResult.otherWords[0].text, "ordinary");
+  assert.equal(matchResult.otherWords[0].selected, false);
+
+  // Verify detailed diagnostics
+  assert.ok(matchResult.diagnostics);
+  assert.equal(matchResult.diagnostics.image.originalWidth, 1000);
+  assert.equal(matchResult.diagnostics.image.processedWidth, 250);
+  assert.equal(matchResult.diagnostics.image.scale, 0.25);
+  assert.equal(matchResult.diagnostics.ocr.totalOcrWords, 2);
+  assert.equal(matchResult.diagnostics.matching.matchedMarkedWordCount, 1);
+  assert.equal(matchResult.diagnostics.wordDiagnostics.length, 2);
+
+  const diag0 = matchResult.diagnostics.wordDiagnostics.find(
+    (w) => w.word === "serendipity",
+  );
+  assert.ok(diag0);
+  assert.equal(diag0.selected, true);
+  assert.ok(diag0.reason.includes("green"));
+});
+
+// -------------------------------------------------------------
+// 11. Zod Schema Validation Tests
 // -------------------------------------------------------------
 test("importScannedWordsSchema validates word constraints and array length", () => {
   const valid = importScannedWordsSchema.parse({

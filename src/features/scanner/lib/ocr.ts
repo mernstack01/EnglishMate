@@ -92,11 +92,17 @@ export async function recognizeWordsLocally(
 
   const worker = await getTesseractWorker("eng", onProgress);
 
-  const result = await worker.recognize(canvasOrImage);
+  // In Tesseract.js v7, defaultOutput.js specifies { blocks: false }.
+  // Explicitly passing { blocks: true, text: true } ensures word bounding boxes and blocks are populated.
+  const result = await worker.recognize(
+    canvasOrImage,
+    {},
+    { blocks: true, text: true },
+  );
   const words: OcrWord[] = [];
 
   // Tesseract Page hierarchy: blocks -> paragraphs -> lines -> words
-  if (result?.data?.blocks) {
+  if (result?.data?.blocks && result.data.blocks.length > 0) {
     for (const block of result.data.blocks) {
       if (!block.paragraphs) continue;
       for (const para of block.paragraphs) {
@@ -118,6 +124,41 @@ export async function recognizeWordsLocally(
           }
         }
       }
+    }
+  } else if (
+    Array.isArray(
+      (
+        result?.data as unknown as {
+          words?: Array<{
+            text?: string;
+            confidence?: number;
+            bbox?: { x0: number; y0: number; x1: number; y1: number };
+          }>;
+        }
+      )?.words,
+    )
+  ) {
+    const rawWords = (
+      result.data as unknown as {
+        words: Array<{
+          text?: string;
+          confidence?: number;
+          bbox?: { x0: number; y0: number; x1: number; y1: number };
+        }>;
+      }
+    ).words;
+    for (const w of rawWords) {
+      if (!w.text || !w.bbox) continue;
+      words.push({
+        text: w.text,
+        confidence: typeof w.confidence === "number" ? w.confidence : 80,
+        bbox: {
+          x0: w.bbox.x0,
+          y0: w.bbox.y0,
+          x1: w.bbox.x1,
+          y1: w.bbox.y1,
+        },
+      });
     }
   }
 

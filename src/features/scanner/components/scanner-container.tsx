@@ -140,20 +140,36 @@ export function ScannerContainer() {
       setStageProgress(0.95);
       setStageMessage("Matching words to physical marks...");
 
-      const { detectedWords, otherWords } = matchWordsToMarks(
-        ocrWords,
-        markRegions,
-        imageData,
-      );
+      const {
+        detectedWords,
+        otherWords,
+        markRegions: updatedMarkRegions,
+        diagnostics,
+      } = matchWordsToMarks(ocrWords, markRegions, imageData, {
+        originalWidth: imgElement.naturalWidth || imgElement.width,
+        originalHeight: imgElement.naturalHeight || imgElement.height,
+        processedWidth: processed.width,
+        processedHeight: processed.height,
+        rotation,
+        scale: processed.scale,
+      });
+
+      const processedImageUrl = processed.canvas.toDataURL("image/jpeg", 0.92);
 
       const result: ScanResult = {
         imageWidth: processed.width,
         imageHeight: processed.height,
+        processedImageUrl,
         ocrWords,
-        markRegions,
+        markRegions: updatedMarkRegions,
         detectedWords,
         otherWords,
+        diagnostics,
       };
+
+      if (process.env.NODE_ENV !== "production") {
+        console.log("[EnglishMate Scanner Diagnostics]", diagnostics);
+      }
 
       setScanResult(result);
       setStage("ready");
@@ -223,7 +239,7 @@ export function ScannerContainer() {
       {/* Step 3: Scan complete -> Show Review screen */}
       {imageSrc && scanResult && (
         <ScannerReview
-          imageSrc={imageSrc}
+          imageSrc={scanResult.processedImageUrl || imageSrc}
           scanResult={scanResult}
           onRescan={handleScanPage}
           onImport={handleImportAction}
